@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>果物色記憶ゲーム 研究版DX</title>
+<style>
+body{font-family:sans-serif;background:#f4f6f8;text-align:center;margin:20px}
+#fruits{display:flex;justify-content:center;gap:15px;flex-wrap:wrap;min-height:160px}
+.card{background:#fff;border-radius:15px;padding:10px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+svg{width:95px;height:95px}
+button{padding:8px 14px;margin:4px}
+table{margin:auto;border-collapse:collapse}
+th,td{border:1px solid #aaa;padding:4px 8px}
+canvas{background:white;border:1px solid #ccc;margin:10px}
+</style>
+</head>
+<body>
+<h1>🍓 果物色記憶ゲーム 研究版DX</h1>
+<button onclick="startGame()">スタート</button>
+<button onclick="downloadCSV()">CSVダウンロード</button>
+<button onclick="resetData()">リセット</button>
+
+<div id="fruits"></div>
+<h2 id="question"></h2>
+<div id="choices"></div>
+<div id="result"></div>
+
+<h3>統計</h3>
+<p id="summary"></p>
+<table>
+<thead><tr><th>色</th><th>正解</th><th>挑戦</th><th>正答率</th></tr></thead>
+<tbody id="stats"></tbody>
+</table>
+
+<h3>色ごとの正答率</h3>
+<canvas id="rateChart" width="700" height="250"></canvas>
+
+<h3>色ごとの平均回答時間</h3>
+<canvas id="timeChart" width="700" height="250"></canvas>
+
+<script>
+const colors=["red","blue","green","yellow","purple","orange"];
+const jp={red:"赤",blue:"青",green:"緑",yellow:"黄",purple:"紫",orange:"オレンジ"};
+
+const fruits=[
+{name:"リンゴ",svg:c=>`<svg viewBox="0 0 100 100"><ellipse cx="50" cy="55" rx="28" ry="25" fill="${c}"/><ellipse cx="40" cy="45" rx="8" ry="5" fill="rgba(255,255,255,.5)"/><rect x="48" y="15" width="4" height="15" fill="brown"/><ellipse cx="62" cy="20" rx="12" ry="6" fill="green" transform="rotate(-25 62 20)"/></svg>`},
+{name:"バナナ",svg:c=>`<svg viewBox="0 0 100 100"><path d="M20 60 Q50 95 85 35" stroke="${c}" stroke-width="16" fill="none" stroke-linecap="round"/><path d="M25 58 Q52 86 80 38" stroke="white" stroke-width="3" fill="none"/></svg>`},
+{name:"ブドウ",svg:c=>`<svg viewBox="0 0 100 100"><circle cx="50" cy="25" r="10" fill="${c}"/><circle cx="40" cy="40" r="10" fill="${c}"/><circle cx="60" cy="40" r="10" fill="${c}"/><circle cx="35" cy="58" r="10" fill="${c}"/><circle cx="50" cy="58" r="10" fill="${c}"/><circle cx="65" cy="58" r="10" fill="${c}"/><rect x="48" y="5" width="4" height="10" fill="green"/></svg>`},
+{name:"ミカン",svg:c=>`<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="28" fill="${c}"/><ellipse cx="60" cy="20" rx="10" ry="5" fill="green"/></svg>`},
+{name:"サクランボ",svg:c=>`<svg viewBox="0 0 100 100"><circle cx="38" cy="65" r="12" fill="${c}"/><circle cx="62" cy="65" r="12" fill="${c}"/><path d="M38 53 Q48 15 50 10" stroke="green" fill="none"/><path d="M62 53 Q52 15 50 10" stroke="green" fill="none"/></svg>`},
+{name:"イチゴ",svg:c=>`<svg viewBox="0 0 100 100"><path d="M50 20 C75 20 82 70 50 90 C18 70 25 20 50 20" fill="${c}"/><polygon points="40,18 50,10 60,18" fill="green"/></svg>`}
+];
+
+let currentFruit,currentColor,startTime;
+let logs=[];
+let stats={};
+colors.forEach(c=>stats[c]={correct:0,total:0,times:[]});
+
+function rand(a){return a[Math.floor(Math.random()*a.length)]}
+
+function startGame(){
+fruitsArea.innerHTML="";
+question.textContent="";
+choices.innerHTML="";
+result.innerHTML="";
+let display=[];
+fruits.forEach(f=>{
+ let col=rand(colors);
+ display.push({name:f.name,color:col});
+ let d=document.createElement("div");
+ d.className="card";
+ d.innerHTML=f.svg(col)+"<br>"+f.name;
+ fruitsArea.appendChild(d);
+});
+let t=rand(display);
+currentFruit=t.name;
+currentColor=t.color;
+setTimeout(()=>{
+ fruitsArea.innerHTML="";
+ question.textContent=currentFruit+" は何色でしたか？";
+ colors.forEach(c=>{
+   let b=document.createElement("button");
+   b.textContent=jp[c];
+   b.onclick=()=>answer(c);
+   choices.appendChild(b);
+ });
+ startTime=performance.now();
+},3000);
+}
+
+function answer(sel){
+let sec=((performance.now()-startTime)/1000).toFixed(2);
+let ok=sel===currentColor;
+stats[currentColor].total++;
+stats[currentColor].times.push(Number(sec));
+if(ok) stats[currentColor].correct++;
+logs.push([logs.length+1,currentFruit,jp[currentColor],jp[sel],ok?"○":"×",sec]);
+result.innerHTML=ok?"⭕正解":"❌不正解（正解:"+jp[currentColor]+"）";
+choices.innerHTML="";
+update();
+}
+
+function update(){
+let total=0,correct=0,sumTime=0;
+statsBody.innerHTML="";
+colors.forEach(c=>{
+ total+=stats[c].total;
+ correct+=stats[c].correct;
+ sumTime+=stats[c].times.reduce((a,b)=>a+b,0);
+ let rate=stats[c].total?((stats[c].correct/stats[c].total)*100).toFixed(1):"-";
+ statsBody.innerHTML+=`<tr><td>${jp[c]}</td><td>${stats[c].correct}</td><td>${stats[c].total}</td><td>${rate}${rate!="-"?"%":""}</td></tr>`;
+});
+let avg=logs.length?(sumTime/logs.length).toFixed(2):0;
+summary.textContent=`試行:${total}　総合正答率:${total?((correct/total)*100).toFixed(1):0}%　平均時間:${avg}秒`;
+drawCharts();
+}
+
+function drawBar(canvasId,data,maxVal){
+const cv=document.getElementById(canvasId),ctx=cv.getContext("2d");
+ctx.clearRect(0,0,cv.width,cv.height);
+const w=80,g=25;
+data.forEach((v,i)=>{
+ let h=(v/maxVal)*180||0;
+ ctx.fillStyle=colors[i];
+ ctx.fillRect(40+i*(w+g),220-h,w,h);
+ ctx.fillStyle="black";
+ ctx.fillText(jp[colors[i]],55+i*(w+g),240);
+ ctx.fillText(v.toFixed(1),55+i*(w+g),210-h);
+});
+}
+
+function drawCharts(){
+let rates=colors.map(c=>stats[c].total?(stats[c].correct/stats[c].total*100):0);
+let times=colors.map(c=>stats[c].times.length?stats[c].times.reduce((a,b)=>a+b,0)/stats[c].times.length:0);
+drawBar("rateChart",rates,100);
+drawBar("timeChart",times,Math.max(...times,3));
+}
+
+function downloadCSV(){
+let csv="試行,果物,正解色,回答色,正誤,時間\n";
+logs.forEach(r=>csv+=r.join(",")+"\n");
+let a=document.createElement("a");
+a.href=URL.createObjectURL(new Blob([csv]));
+a.download="fruit_memory_results.csv";
+a.click();
+}
+
+function resetData(){
+logs=[];
+colors.forEach(c=>stats[c]={correct:0,total:0,times:[]});
+update();
+}
+update();
+</script>
+</body>
+</html>
